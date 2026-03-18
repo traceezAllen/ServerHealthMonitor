@@ -34,7 +34,7 @@ Monitor_Category (1) ──→ (N) Monitor_Service (1) ──→ (N) Monitor_Hea
 |---|---|---|---|---|---|
 | iCar 570 | `iCarSink(570)` | 6930 | `safetrekawssink.traceez.com` | `100000000000002` |  已完成 |
 | YJGPS 540 | `YJGPSSink(540)` | 6971 | `safetrekawssink.traceez.com` | `100000000000002` |  已完成 |
-| iPet 340 | `ipetSink(340)` | 6970 | (待確認) | `100000000000002` |  待測試 |
+| iPet 340 | `ipetSink(340)` | 6969 | `safetrekawssink.traceez.com` | `100000000000002` | ✅ 已完成 |
 
 ### 測試流程
 
@@ -205,7 +205,7 @@ ICAR_SINK_PORT=9999
 ### iPet 340 系列
 | 程式 | 說明 | Port |
 |---|---|---|
-| 340Sink_V1 / 340Sink_V2 | GPS 資料接收 Server | TCP 6970 |
+| 340Sink_V1 / 340Sink_V2 | GPS 資料接收 Server | TCP 6969 |
 | 340SinkForUDP | UDP 資料接收 | UDP 5960 |
 | iPetHeartbeatMonitor | 心跳監控 | — |
 | iPetManager | 管理介面（WinForms） | — |
