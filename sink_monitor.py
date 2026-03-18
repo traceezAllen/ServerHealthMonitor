@@ -407,15 +407,21 @@ def check_single_sink(key: str):
 def main():
     interval = SinkCommonConfig.CHECK_INTERVAL_S
 
-    # 解析 --only 參數
+    # 解析目標參數：支援 --only icar 或直接 icar
     only_target = None
     if "--only" in sys.argv:
         idx = sys.argv.index("--only")
         if idx + 1 < len(sys.argv):
             only_target = sys.argv[idx + 1].lower()
-            if only_target not in SINK_TARGETS:
-                logger.error(f"未知的目標: {only_target}，可用: {list(SINK_TARGETS.keys())}")
-                sys.exit(1)
+    else:
+        for arg in sys.argv[1:]:
+            if arg.lower() in SINK_TARGETS:
+                only_target = arg.lower()
+                break
+
+    if only_target and only_target not in SINK_TARGETS:
+        logger.error(f"未知的目標: {only_target}，可用: {list(SINK_TARGETS.keys())}")
+        sys.exit(1)
 
     targets = [only_target] if only_target else list(SINK_TARGETS.keys())
 

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-dashboard",
+      "runtimeExecutable": "/Users/allenchiu/develop/ServerMonitor/venv/bin/python",
+      "runtimeArgs": ["/Users/allenchiu/develop/ServerMonitor/web/app.py"],
+      "port": 5000
+    }
+  ]
+}

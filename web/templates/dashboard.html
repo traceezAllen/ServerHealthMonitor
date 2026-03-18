@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Monitor - Server-Monitor.traceez.com</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-md border-bottom border-secondary sticky-top nav-blur">
+        <div class="container-fluid px-3 px-md-4">
+            <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="/">
+                <i class="bi bi-hdd-rack-fill text-primary"></i>
+                <span>Server Monitor</span>
+            </a>
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-secondary small d-none d-md-inline" id="lastUpdatedNav">
+                    <i class="bi bi-clock me-1"></i>最後更新: {{ data.updated_at }}
+                </span>
+                <button class="btn btn-outline-secondary btn-sm" onclick="refreshData()" id="refreshBtn" title="手動重新整理">
+                    <i class="bi bi-arrow-clockwise" id="refreshIcon"></i>
+                </button>
+                <a href="/logout" class="btn btn-outline-danger btn-sm" title="登出">
+                    <i class="bi bi-box-arrow-right"></i><span class="d-none d-md-inline ms-1">登出</span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid px-3 px-md-4 py-3">
+
+        <!-- Error alert -->
+        {% if data.error is defined %}
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <div>資料庫連線錯誤: {{ data.error }}</div>
+        </div>
+        {% endif %}
+
+        <!-- Summary Cards -->
+        <div class="row g-3 mb-4" id="summaryCards">
+            <div class="col-6 col-md-3">
+                <div class="card summary-card border-0 h-100">
+                    <div class="card-body text-center py-3">
+                        <div class="summary-icon text-info"><i class="bi bi-server"></i></div>
+                        <div class="summary-value" id="totalCount">{{ data.total }}</div>
+                        <div class="summary-label">監控服務總數</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card summary-card border-0 h-100">
+                    <div class="card-body text-center py-3">
+                        <div class="summary-icon text-success"><i class="bi bi-check-circle-fill"></i></div>
+                        <div class="summary-value text-success" id="okCount">{{ data.ok }}</div>
+                        <div class="summary-label">正常運行</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card summary-card border-0 h-100">
+                    <div class="card-body text-center py-3">
+                        <div class="summary-icon text-danger"><i class="bi bi-x-circle-fill"></i></div>
+                        <div class="summary-value text-danger" id="failCount">{{ data.fail }}</div>
+                        <div class="summary-label">異常服務</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card summary-card border-0 h-100">
+                    <div class="card-body text-center py-3">
+                        <div class="summary-icon text-secondary"><i class="bi bi-dash-circle"></i></div>
+                        <div class="summary-value text-secondary" id="noDataCount">{{ data.total - data.ok - data.fail }}</div>
+                        <div class="summary-label">無資料</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile last updated -->
+        <div class="d-md-none text-center mb-3">
+            <small class="text-secondary" id="lastUpdatedMobile">
+                <i class="bi bi-clock me-1"></i>最後更新: {{ data.updated_at }}
+            </small>
+        </div>
+
+        <!-- Auto-refresh countdown -->
+        <div class="d-flex justify-content-end mb-2">
+            <small class="text-secondary" id="countdown">30 秒後自動重新整理</small>
+        </div>
+
+        <!-- Category Sections -->
+        <div id="categoryContainer">
+            {% for cat_name, services in data.categories.items() %}
+            {% set cat_ok = services | selectattr('last_status') | selectattr('last_status', 'equalto', 'OK') | list | length %}
+            {% set cat_fail = services | selectattr('last_status') | selectattr('last_status', 'equalto', 'FAIL') | list | length %}
+            <div class="card category-card border-0 mb-3">
+                <div class="card-header category-header d-flex align-items-center justify-content-between"
+                     data-bs-toggle="collapse" data-bs-target="#cat-{{ loop.index }}" role="button">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-folder2-open text-primary"></i>
+                        <span class="fw-semibold">{{ cat_name }}</span>
+                        <span class="badge bg-secondary rounded-pill">{{ services | length }}</span>
+                        {% if cat_fail > 0 %}
+                        <span class="badge bg-danger rounded-pill">{{ cat_fail }} 異常</span>
+                        {% endif %}
+                    </div>
+                    <i class="bi bi-chevron-down collapse-icon"></i>
+                </div>
+                <div id="cat-{{ loop.index }}" class="collapse show">
+                    <div class="card-body p-0">
+                        <!-- Desktop table -->
+                        <div class="table-responsive d-none d-lg-block">
+                            <table class="table table-hover table-dark mb-0 monitor-table">
+                                <thead>
+                                    <tr>
+                                        <th>服務名稱</th>
+                                        <th>監控類型</th>
+                                        <th>網域 / 位址</th>
+                                        <th class="text-center">狀態</th>
+                                        <th>最後檢查時間</th>
+                                        <th class="text-end">回應時間</th>
+                                        <th class="text-center">連續失敗</th>
+                                        <th>錯誤訊息</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for s in services %}
+                                    <tr class="{% if s.last_status and s.last_status == 'FAIL' %}row-fail{% endif %}">
+                                        <td class="fw-semibold">{{ s.service_name }}</td>
+                                        <td><span class="badge bg-secondary">{{ s.monitor_type or '-' }}</span></td>
+                                        <td class="text-truncate" style="max-width:220px;" title="{{ s.domain or '' }}">{{ s.domain or '-' }}</td>
+                                        <td class="text-center">
+                                            {% if s.last_status and s.last_status == 'OK' %}
+                                            <span class="badge status-ok"><i class="bi bi-check-lg me-1"></i>OK</span>
+                                            {% elif s.last_status and s.last_status == 'FAIL' %}
+                                            <span class="badge status-fail"><i class="bi bi-x-lg me-1"></i>FAIL</span>
+                                            {% else %}
+                                            <span class="badge status-nodata"><i class="bi bi-dash-lg me-1"></i>N/A</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-nowrap small">{{ s.last_check_time or '-' }}</td>
+                                        <td class="text-end text-nowrap">
+                                            {% if s.response_time_ms is not none %}
+                                                {% if s.response_time_ms < 500 %}
+                                                <span class="text-success fw-semibold">{{ s.response_time_ms }} ms</span>
+                                                {% elif s.response_time_ms < 2000 %}
+                                                <span class="text-warning fw-semibold">{{ s.response_time_ms }} ms</span>
+                                                {% else %}
+                                                <span class="text-danger fw-semibold">{{ s.response_time_ms }} ms</span>
+                                                {% endif %}
+                                            {% else %}
+                                            <span class="text-secondary">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if s.consecutive_fail and s.consecutive_fail > 0 %}
+                                            <span class="badge bg-danger">{{ s.consecutive_fail }}</span>
+                                            {% else %}
+                                            <span class="text-secondary">0</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="small text-truncate" style="max-width:280px;" title="{{ s.last_error or '' }}">
+                                            {{ s.last_error or '-' }}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <!-- Mobile cards -->
+                        <div class="d-lg-none p-2">
+                            {% for s in services %}
+                            <div class="mobile-service-card mb-2 p-3 rounded-3 {% if s.last_status and s.last_status == 'FAIL' %}border-danger{% endif %}">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div class="fw-semibold">{{ s.service_name }}</div>
+                                    {% if s.last_status and s.last_status == 'OK' %}
+                                    <span class="badge status-ok"><i class="bi bi-check-lg me-1"></i>OK</span>
+                                    {% elif s.last_status and s.last_status == 'FAIL' %}
+                                    <span class="badge status-fail"><i class="bi bi-x-lg me-1"></i>FAIL</span>
+                                    {% else %}
+                                    <span class="badge status-nodata"><i class="bi bi-dash-lg me-1"></i>N/A</span>
+                                    {% endif %}
+                                </div>
+                                <div class="row g-1 small text-secondary">
+                                    <div class="col-6"><i class="bi bi-tag me-1"></i>{{ s.monitor_type or '-' }}</div>
+                                    <div class="col-6 text-end">
+                                        {% if s.response_time_ms is not none %}
+                                            {% if s.response_time_ms < 500 %}
+                                            <span class="text-success">{{ s.response_time_ms }} ms</span>
+                                            {% elif s.response_time_ms < 2000 %}
+                                            <span class="text-warning">{{ s.response_time_ms }} ms</span>
+                                            {% else %}
+                                            <span class="text-danger">{{ s.response_time_ms }} ms</span>
+                                            {% endif %}
+                                        {% else %}-{% endif %}
+                                    </div>
+                                    <div class="col-12 text-truncate"><i class="bi bi-globe me-1"></i>{{ s.domain or '-' }}</div>
+                                    <div class="col-12"><i class="bi bi-clock me-1"></i>{{ s.last_check_time or '-' }}</div>
+                                    {% if s.consecutive_fail and s.consecutive_fail > 0 %}
+                                    <div class="col-12 text-danger"><i class="bi bi-exclamation-triangle me-1"></i>連續失敗: {{ s.consecutive_fail }}</div>
+                                    {% endif %}
+                                    {% if s.last_error %}
+                                    <div class="col-12 text-danger text-truncate"><i class="bi bi-chat-left-text me-1"></i>{{ s.last_error }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+
+            {% if not data.categories %}
+            <div class="text-center text-secondary py-5">
+                <i class="bi bi-inbox" style="font-size:3rem;"></i>
+                <p class="mt-2">目前沒有監控服務資料</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="text-center text-secondary small py-3 border-top border-secondary mt-4">
+        Server Monitor Dashboard &copy; {{ data.updated_at[:4] if data.updated_at else '2026' }} &mdash; Server-Monitor.traceez.com
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const REFRESH_INTERVAL = 30;
+        let countdown = REFRESH_INTERVAL;
+        let timer = null;
+
+        function startCountdown() {
+            countdown = REFRESH_INTERVAL;
+            if (timer) clearInterval(timer);
+            timer = setInterval(() => {
+                countdown--;
+                const el = document.getElementById('countdown');
+                if (el) el.textContent = countdown + ' 秒後自動重新整理';
+                if (countdown <= 0) {
+                    refreshData();
+                }
+            }, 1000);
+        }
+
+        async function refreshData() {
+            const btn = document.getElementById('refreshBtn');
+            const icon = document.getElementById('refreshIcon');
+            btn.disabled = true;
+            icon.classList.add('spin');
+
+            try {
+                const resp = await fetch('/api/dashboard');
+                if (resp.status === 401 || resp.redirected) {
+                    window.location.href = '/login';
+                    return;
+                }
+                const data = await resp.json();
+                updateDashboard(data);
+            } catch (e) {
+                console.error('Refresh failed:', e);
+            } finally {
+                btn.disabled = false;
+                icon.classList.remove('spin');
+                startCountdown();
+            }
+        }
+
+        function statusBadge(status) {
+            if (status && status.toUpperCase() === 'OK')
+                return '<span class="badge status-ok"><i class="bi bi-check-lg me-1"></i>OK</span>';
+            if (status && status.toUpperCase() === 'FAIL')
+                return '<span class="badge status-fail"><i class="bi bi-x-lg me-1"></i>FAIL</span>';
+            return '<span class="badge status-nodata"><i class="bi bi-dash-lg me-1"></i>N/A</span>';
+        }
+
+        function responseTimeHtml(ms) {
+            if (ms === null || ms === undefined) return '<span class="text-secondary">-</span>';
+            let cls = 'text-success';
+            if (ms >= 2000) cls = 'text-danger';
+            else if (ms >= 500) cls = 'text-warning';
+            return `<span class="${cls} fw-semibold">${ms} ms</span>`;
+        }
+
+        function failBadge(count) {
+            if (count && count > 0)
+                return `<span class="badge bg-danger">${count}</span>`;
+            return '<span class="text-secondary">0</span>';
+        }
+
+        function esc(str) {
+            if (!str) return '-';
+            const d = document.createElement('div');
+            d.textContent = str;
+            return d.innerHTML;
+        }
+
+        function updateDashboard(data) {
+            // Summary
+            document.getElementById('totalCount').textContent = data.total;
+            document.getElementById('okCount').textContent = data.ok;
+            document.getElementById('failCount').textContent = data.fail;
+            document.getElementById('noDataCount').textContent = data.total - data.ok - data.fail;
+
+            // Timestamps
+            const ts = data.updated_at || '-';
+            document.getElementById('lastUpdatedNav').innerHTML = '<i class="bi bi-clock me-1"></i>最後更新: ' + ts;
+            document.getElementById('lastUpdatedMobile').innerHTML = '<i class="bi bi-clock me-1"></i>最後更新: ' + ts;
+
+            // Categories
+            const container = document.getElementById('categoryContainer');
+            if (!data.categories || Object.keys(data.categories).length === 0) {
+                container.innerHTML = '<div class="text-center text-secondary py-5"><i class="bi bi-inbox" style="font-size:3rem;"></i><p class="mt-2">目前沒有監控服務資料</p></div>';
+                return;
+            }
+
+            let html = '';
+            let idx = 0;
+            for (const [catName, services] of Object.entries(data.categories)) {
+                idx++;
+                const catOk = services.filter(s => s.last_status && s.last_status.toUpperCase() === 'OK').length;
+                const catFail = services.filter(s => s.last_status && s.last_status.toUpperCase() === 'FAIL').length;
+                const failBadgeHtml = catFail > 0 ? `<span class="badge bg-danger rounded-pill">${catFail} 異常</span>` : '';
+
+                html += `
+                <div class="card category-card border-0 mb-3">
+                    <div class="card-header category-header d-flex align-items-center justify-content-between"
+                         data-bs-toggle="collapse" data-bs-target="#cat-${idx}" role="button">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-folder2-open text-primary"></i>
+                            <span class="fw-semibold">${esc(catName)}</span>
+                            <span class="badge bg-secondary rounded-pill">${services.length}</span>
+                            ${failBadgeHtml}
+                        </div>
+                        <i class="bi bi-chevron-down collapse-icon"></i>
+                    </div>
+                    <div id="cat-${idx}" class="collapse show">
+                        <div class="card-body p-0">
+                            <div class="table-responsive d-none d-lg-block">
+                                <table class="table table-hover table-dark mb-0 monitor-table">
+                                    <thead><tr>
+                                        <th>服務名稱</th><th>監控類型</th><th>網域 / 位址</th>
+                                        <th class="text-center">狀態</th><th>最後檢查時間</th>
+                                        <th class="text-end">回應時間</th><th class="text-center">連續失敗</th><th>錯誤訊息</th>
+                                    </tr></thead>
+                                    <tbody>`;
+                for (const s of services) {
+                    const rowCls = (s.last_status && s.last_status.toUpperCase() === 'FAIL') ? 'row-fail' : '';
+                    html += `<tr class="${rowCls}">
+                        <td class="fw-semibold">${esc(s.service_name)}</td>
+                        <td><span class="badge bg-secondary">${esc(s.monitor_type)}</span></td>
+                        <td class="text-truncate" style="max-width:220px;" title="${esc(s.domain)}">${esc(s.domain)}</td>
+                        <td class="text-center">${statusBadge(s.last_status)}</td>
+                        <td class="text-nowrap small">${s.last_check_time || '-'}</td>
+                        <td class="text-end text-nowrap">${responseTimeHtml(s.response_time_ms)}</td>
+                        <td class="text-center">${failBadge(s.consecutive_fail)}</td>
+                        <td class="small text-truncate" style="max-width:280px;" title="${esc(s.last_error)}">${esc(s.last_error)}</td>
+                    </tr>`;
+                }
+                html += `</tbody></table></div>`;
+
+                // Mobile cards
+                html += `<div class="d-lg-none p-2">`;
+                for (const s of services) {
+                    const borderCls = (s.last_status && s.last_status.toUpperCase() === 'FAIL') ? 'border-danger' : '';
+                    html += `
+                    <div class="mobile-service-card mb-2 p-3 rounded-3 ${borderCls}">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="fw-semibold">${esc(s.service_name)}</div>
+                            ${statusBadge(s.last_status)}
+                        </div>
+                        <div class="row g-1 small text-secondary">
+                            <div class="col-6"><i class="bi bi-tag me-1"></i>${esc(s.monitor_type)}</div>
+                            <div class="col-6 text-end">${responseTimeHtml(s.response_time_ms)}</div>
+                            <div class="col-12 text-truncate"><i class="bi bi-globe me-1"></i>${esc(s.domain)}</div>
+                            <div class="col-12"><i class="bi bi-clock me-1"></i>${s.last_check_time || '-'}</div>
+                            ${(s.consecutive_fail && s.consecutive_fail > 0) ? `<div class="col-12 text-danger"><i class="bi bi-exclamation-triangle me-1"></i>連續失敗: ${s.consecutive_fail}</div>` : ''}
+                            ${s.last_error ? `<div class="col-12 text-danger text-truncate"><i class="bi bi-chat-left-text me-1"></i>${esc(s.last_error)}</div>` : ''}
+                        </div>
+                    </div>`;
+                }
+                html += `</div></div></div></div>`;
+            }
+
+            container.innerHTML = html;
+        }
+
+        // Start auto-refresh
+        startCountdown();
+    </script>
+</body>
+</html>

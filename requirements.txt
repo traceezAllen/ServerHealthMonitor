@@ -1,2 +1,4 @@
 pymssql
 python-dotenv
+flask
+requests
