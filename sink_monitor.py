@@ -84,7 +84,7 @@ def build_rd_packet(msg_num: int, imei: str, rd_format: str = "icar") -> bytes:
         gps_data = (
             date_str                             #  0- 5: MMDDYY (6 chars)
             + time_str                           #  6-11: HHMMSS (6 chars)
-            + "2501.9154NA"                       # 12-21: Latitude+N/S (10 chars)
+            + "2501.9154N"                       # 12-21: Latitude+N/S (10 chars)
             + "12114.2088E"                      # 22-32: Longitude+E/W (11 chars)
             + "0.063"                            # 33-37: Speed, knots (5 chars)
             + "000"                              # 38-40: Course (3 chars)
